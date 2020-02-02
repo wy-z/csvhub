@@ -1,6 +1,7 @@
 {
   "manifest_version": 2,
   "name": "CSVHub",
+  "homepage_url": "https://github.com/theodi/csvhub",
   "description": "Shows useful diffs for CSV files on GitHub",
   "version": "1.0.3",
   "icons": {
