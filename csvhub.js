@@ -1,21 +1,24 @@
+const CSVHUB_RENDERED = "csvhub-rendered";
+
 function render_csv_files() {
   // Check diff view mode
   var diff_view = $("meta[name=diff-view]").attr("content"); // 'unified' or 'split'
   if (diff_view != "unified") return; // Work only in 'unified' mode
 
   // Find all files in the page
-  files = $("div#files.diff-view .file");
+  files = $(`div#files.diff-view .file:not(.${CSVHUB_RENDERED})`);
   for (var f = 0; f < files.length; f++) {
+    var file_div = files[f];
     // Large diffs are not rendered by default, skip this file
-    if (files[f].querySelector("div.data") == null) continue;
+    if (file_div.querySelector("div.data") == null) continue;
 
     // Check if this is a CSV file
-    filename = files[f]
+    filename = file_div
       .querySelector("div[data-path]")
       .getAttribute("data-path");
     if (filename.match(".*.csv$")) {
       // Get all diff lines
-      lines = files[f].querySelectorAll(".blob-code-marker");
+      lines = file_div.querySelectorAll(".blob-code-marker");
 
       // Get data
       var old_data = [];
@@ -65,12 +68,21 @@ function render_csv_files() {
       diff2html.render(table_diff);
       diff_html = diff2html.html();
 
-      files[f].querySelector("div.data").innerHTML =
+      file_div.querySelector("div.data").innerHTML =
         "<div class='csvhub-diff'>" + diff_html + "</div>";
+      files[f].classList.add(CSVHUB_RENDERED);
     }
   }
 }
 
 $(function() {
   render_csv_files();
+});
+
+// Listen message
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+  if (request.action == "render_csv_files") {
+    render_csv_files();
+    sendResponse("CSV files successfully rendered.");
+  }
 });
