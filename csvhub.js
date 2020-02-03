@@ -1,65 +1,88 @@
-// find all files in the page
-files = $("div#files.diff-view .file");
-for (var f = 0; f < files.length; f++) {
+const CSVHUB_RENDERED = "csvhub-rendered";
 
-  // check if this is a CSV file
-  filename = files[f].querySelector("div[data-path]").getAttribute('data-path');
-  if (filename.match(".*\.csv")) {
+function render_csv_files() {
+  // Check diff view mode
+  var diff_view = $("meta[name=diff-view]").attr("content"); // 'unified' or 'split'
+  if (diff_view != "unified") return; // Work only in 'unified' mode
 
+  // Find all files in the page
+  files = $(`div#files.diff-view .file:not(.${CSVHUB_RENDERED})`);
+  for (var f = 0; f < files.length; f++) {
+    var file_div = files[f];
+    // Large diffs are not rendered by default, skip this file
+    if (file_div.querySelector("div.data") == null) continue;
 
-    // Get all diff lines
-    lines = files[f].querySelectorAll(".blob-code-inner");
+    // Check if this is a CSV file
+    filename = file_div
+      .querySelector("div[data-path]")
+      .getAttribute("data-path");
+    if (filename.match(".*.csv$")) {
+      // Get all diff lines
+      lines = file_div.querySelectorAll(".blob-code-marker");
 
-    // Get data
-    var old_data = []
-    var new_data = []
+      // Get data
+      var old_data = [];
+      var new_data = [];
 
-    for (var l = 0; l < lines.length; l++) {
+      for (var l = 0; l < lines.length; l++) {
+        // Parse data from line
+        code_marker = lines[l].getAttribute("data-code-marker");
+        line = lines[l].textContent.trim();
+        if (line.length == 0) continue; // Skip empty line
+        data = $.csv.toArray(line);
 
-      // Parse data from line
-      line = lines[l].textContent;
-      data = $.csv.toArray(line.substr(1).trim());
+        // Line has been added
+        if (code_marker == "+") {
+          new_data.push(data);
+        }
 
-      // Line has been added
-      if (line.indexOf("+") == 0) {
-        new_data.push(data);
+        // Line has been removed
+        if (code_marker == "-") {
+          old_data.push(data);
+        }
+
+        // Line has not changed
+        if (code_marker == " ") {
+          new_data.push(data);
+          old_data.push(data);
+        }
       }
 
-      // Line has been removed
-      if (line.indexOf("-") == 0) {
-        old_data.push(data);
-      }
+      // Parse CSV
+      var old_table = new daff.TableView(old_data);
+      var new_table = new daff.TableView(new_data);
 
-      // Line has not changed
-      if (line.indexOf(" ") == 0) {
-        new_data.push(data);
-        old_data.push(data);
-      }
+      var alignment = daff.compareTables(old_table, new_table).align();
 
+      var data_diff = [];
+      var table_diff = new daff.TableView(data_diff);
+
+      var flags = new daff.CompareFlags();
+      flags.show_unchanged = true;
+      flags.show_unchanged_columns = true;
+      flags.always_show_header = false;
+      var highlighter = new daff.TableDiff(alignment, flags);
+      highlighter.hilite(table_diff);
+
+      var diff2html = new daff.DiffRender();
+      diff2html.render(table_diff);
+      diff_html = diff2html.html();
+
+      file_div.querySelector("div.data").innerHTML =
+        "<div class='csvhub-diff'>" + diff_html + "</div>";
+      files[f].classList.add(CSVHUB_RENDERED);
     }
-
-    // Parse CSV
-    var old_table = new daff.TableView(old_data);
-    var new_table = new daff.TableView(new_data);
-
-    var alignment = daff.compareTables(old_table,new_table).align();
-
-    var data_diff = [];
-    var table_diff = new daff.TableView(data_diff);
-
-    var flags = new daff.CompareFlags();
-    flags.show_unchanged = true;
-    flags.show_unchanged_columns = true;
-    flags.always_show_header = false;
-    var highlighter = new daff.TableDiff(alignment,flags);
-    highlighter.hilite(table_diff);
-
-    var diff2html = new daff.DiffRender();
-    diff2html.render(table_diff);
-    diff_html = diff2html.html()
-
-    files[f].querySelector("div.data").innerHTML = "<div class='csvhub-diff'>"+diff_html+"</div>";
-
   }
-
 }
+
+$(function() {
+  render_csv_files();
+});
+
+// Listen message
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+  if (request.action == "render_csv_files") {
+    render_csv_files();
+    sendResponse("CSV files successfully rendered.");
+  }
+});
